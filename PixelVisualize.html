@@ -1,0 +1,163 @@
+<html>
+  <head>
+		<script src="https://cdn.jsdelivr.net/npm/p5@1.1.9/lib/p5.js"></script>
+		<script src="https://unpkg.com/p5ble@0.0.6/dist/p5.ble.js" type="text/javascript"></script>
+		<script src="./recorded.js"></script>
+    <script>
+
+
+
+			const serviceUuid = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+			let pixywand;
+			let pixywandRx;
+			let pixywandTx;
+			let pitch=0, roll=0, yaw=0;
+			let lastPitch = 0;
+			let log;
+			let index = 0;
+			let hue =0 ;
+			let angle = 0;
+
+			function Rgb() {
+				this.hue = 0;
+				this.saturation = 100;
+				this.lightness = 100;
+				this.setHue = function (v) {
+					this.hue = v;
+				}
+
+				this.setBrightness = function (v) { this.lightness = v; }
+				this.setSaturation = function (v) { this.saturation = v; }
+
+				this.draw = function(x, y) {
+					fill(color(this.hue, this.saturation, this.lightness));
+					circle(x, y, 10);
+				}
+			}
+
+			let leds;
+
+			// Sketch
+			function setup() {
+				colorMode(HSB, 100);
+				angleMode(DEGREES);
+				pixywand = new p5ble();
+				leds = [];
+				leds.length = 14;
+				for(let i=0; i<leds.length; i++) {
+					leds[i] = new Rgb();
+				}
+
+				createCanvas(600, 600);
+				textSize(20);
+				textAlign(CENTER, CENTER);
+
+				const connectButton = createButton('Connect')
+  			connectButton.mousePressed(connectToPixywand);
+
+				// Create a 'Disconnect' button
+				const disconnectButton = createButton('Disconnect')
+				disconnectButton.mousePressed(disconnectFromPixywand);
+
+				const replayButton = createButton('Replay');
+				replayButton.mousePressed(startReplay);
+
+				const statsButton = createButton('Stats');
+				statsButton.mousePressed(calculateStats);
+
+				log = createDiv("");
+			}
+
+			function connectToPixywand() {
+				pixywand.connect(serviceUuid, gotCharacteristics);
+			}
+
+			function disconnectFromPixywand() {
+				pixywand.disconnect();
+			}
+
+			function startReplay() {
+				function replayStep() {
+					if (index >= RECORDED.length) return;
+					onNotification(RECORDED[index++]);
+					setTimeout(replayStep, 60);
+				}
+				index = 0;
+				replayStep();
+			}
+
+			function calculateStats() {
+				const reduce_min = (acc, value) => { return acc < value ? acc : value; }
+				const reduce_max = (acc, value) => { return acc > value ? acc : value; }
+
+				const values = RECORDED.map(x => x.split(',').map(Number));
+				const pitches = values.map(x => x[0]);
+				const rolls = values.map(x => x[1]);
+				const yaws = values.map(x => x[2]);
+
+				const min_pitch = pitches.reduce(reduce_min);
+				const max_pitch = pitches.reduce(reduce_max);
+				const min_roll = rolls.reduce(reduce_min);
+				const max_roll = rolls.reduce(reduce_max);
+				const min_yaw = yaws.reduce(reduce_min);
+				const max_yaw = yaws.reduce(reduce_max);
+				log.html("pitch = " + min_pitch + ", " + max_pitch + "<br />");
+				log.html("roll = " + min_roll + ", " + max_roll + "<br />", true);
+				log.html("yaw = " + min_yaw + ", " + max_yaw + "<br />", true);
+			}
+
+			function gotCharacteristics(error, characteristics) {
+        if (error) console.log('error: ', error);
+        console.log('characteristics: ', characteristics);
+        pixywandRx = characteristics[0];
+				pixywandTx = characteristics[1];
+
+				pixywand.startNotifications(pixywandRx, onNotification, 'string');
+      }
+
+			function onNotification(data) {
+				// log.html(data, true);
+				let values = data.split(',').map(Number);
+				lastPitch = pitch;
+				pitch = values[0];
+				roll = values[1];
+				yaw = values[2];
+
+			}
+
+			function draw() {
+				noStroke();
+				const l = map(yaw, -180, 180, 0, leds.length);
+				const r = map(roll, -180, 180, 0, leds.length);
+				if (Math.sign(lastPitch) != Math.sign(pitch)) {
+					hue = (hue + 1) % 100;
+				}
+
+				for(let i=0; i<leds.length; i++) {
+					if (i < l) {
+						leds[i].setHue(hue);
+						leds[i].setBrightness(100);
+					} else if (i > r) {
+						leds[i].setHue(map(hue, 0, 100, 100, 0));
+						leds[i].setBrightness(100);
+					} else {
+						leds[i].setBrightness(0);
+					}
+				}
+
+				translate(200, 200);
+				rotate(angle);
+
+				for(let i=0; i<leds.length; i++) {
+					leds[i].draw((i+1)*12, 0);
+					leds[i].draw(-(i+1)*12, 0);
+				}
+				angle = (angle + 1) % 360;
+			}
+		</script>
+  </head>
+  <body>
+    <main>
+    </main>
+  </body>
+</html>
